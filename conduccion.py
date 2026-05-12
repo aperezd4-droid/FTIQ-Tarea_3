@@ -4,11 +4,13 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 
+
 # ==========================================
 # CONFIGURACIÓN DE LA PÁGINA
 # ==========================================
 st.set_page_config(page_title="Simulador de Conduccion Termica", layout="wide")
 st.title("🧪 Simulador de coeficientes de conduccion termica del Coke Oven Gas y SoyBean Oil")
+
 
 # ======================================= ===
 # NAVEGACIÓN PRINCIPAL
@@ -17,11 +19,13 @@ st.sidebar.title("Navegación")
 seccion = st.sidebar.radio("Selecciona la Mezcla:", ["💨 Coke Oven Gas", "💧 SoyBean Oil"])
 st.sidebar.markdown("---")
 
+
 # =====================================================================
 # =====================================================================
 # 🟢 SECCIÓN 1: GASES 
 # =====================================================================
 # =====================================================================
+
 
 if seccion == "💨 Coke Oven Gas":
     st.info("Cálculo de coeficientes de conduccion termica mediante métodos del libro de Poling y literatura externa")
@@ -180,11 +184,9 @@ if seccion == "💨 Coke Oven Gas":
         return lambda_w_m_k, cp_r_ratio, eta_g_cm_s, lambda_cal_cm_s_k
 
 
-    
-
-
 # 1. Entrada de temperatura por el usuario
 temp_k = st.number_input("Temperatura de análisis (K)", value=523.15)
+
 
 # 2. Definición de Pestañas
 tab_eucken, tab_chung, tab_gharagheizi, tab_svehla, tab_wassiljewa, tab_burgoyne = st.tabs([
@@ -196,10 +198,10 @@ tab_eucken, tab_chung, tab_gharagheizi, tab_svehla, tab_wassiljewa, tab_burgoyne
     "6. Regla: Burgoyne & Weinberg"
 ])
 
+
 # ==========================================
 # PESTAÑA 1: EUCKEN MODIFICADO
 # ==========================================
-
 with tab_eucken:
     st.subheader("Método de Eucken Modificado (Modelo 1)")
     
@@ -847,3 +849,7 @@ with tab_burgoyne: # Asegúrate de haber definido esta pestaña en st.tabs()
     ax_bw.legend()
     ax_bw.grid(True, alpha=0.3)
     st.pyplot(fig_bw)
+
+
+
+
