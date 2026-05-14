@@ -996,6 +996,20 @@ elif seccion == "💧 SoyBean Oil":
         lambda_calc = l0 + dlr
         return lambda_calc, tr, dr, l0, dlr
 
+
+    def obtener_lambda_puro(metodo, row_datos, t_sistema):
+        """Retorna la lambda calculada según el método seleccionado para la mezcla."""
+        if metodo == "1. Latini et al.":
+            l, _, _ = metodo_latini_liquidos(row_datos["M (g/mol)"], row_datos["T_b (K)"], row_datos["T_c (K)"], t_sistema)
+        elif metodo == "2. Sastri":
+            l, _, _ = metodo_sastri_liquidos(row_datos["T_b (K)"], row_datos["T_c (K)"], t_sistema, 
+                                            row_datos["CH3"], row_datos["CH2"], row_datos["Dobles_Enlaces"], row_datos["COOH"])
+        elif metodo == "3. Di Nicola et al.":
+            l, _ = metodo_di_nicola_liquidos(t_sistema, row_datos["T_c (K)"], row_datos["dh_fus"], row_datos["omega"], row_datos["M (g/mol)"])
+        else: # 4. Perkins
+            l, _, _, _, _ = metodo_perkins_liquidos(t_sistema, row_datos["T_c (K)"], row_datos["rho_liq (kg/m3)"], row_datos["rho_c (kg/m3)"], row_datos["Componente"])
+        return l
+
     # ==========================================
     # 3. INTERFAZ DE USUARIO Y PESTAÑAS
     # ==========================================
@@ -1005,8 +1019,8 @@ elif seccion == "💧 SoyBean Oil":
         "Temperatura de análisis (K)", value=313.15, key="temp_aceite"
     )
 
-    tab_latini, tab_sastri, tab_dinicola, tab_perkins, tab_mezcla = st.tabs(
-        ["1. Latini et al.", "2. Sastri", "3. Di Nicola", "4. Perkins", "5. Regla Vredeveld (1917)"]
+    tab_latini, tab_sastri, tab_dinicola, tab_perkins, tab_mezcla, tab_solucion_ideal = st.tabs(
+        ["1. Latini et al.", "2. Sastri", "3. Di Nicola", "4. Perkins", "5. Regla Vredeveld (1917)", "6. Regla de solucion ideal"]
     )
 
     # ==========================================
@@ -1429,114 +1443,181 @@ elif seccion == "💧 SoyBean Oil":
             st.pyplot(fig_per)
 
 
-
     # =====================================================================
     # PESTAÑA 5: REGLA DE MEZCLADO (VREDEVELD - ACEITE DE SOJA)
     # =====================================================================
     with tab_mezcla:
         st.header("🔗 Regla de Mezclado: Modelo de Vredeveld (1917)")
         
-        # --- 1. FUNDAMENTO TEÓRICO ---
-        with st.expander("📖 Ver Fundamento Teórico (Vredeveld)", expanded=False):
-            st.write("El modelo de Vredeveld se utiliza para estimar la conductividad de mezclas líquidas orgánicas:")
-            st.latex(r"K_M = \left( \sum_{i} x_i \cdot K_i^{-2} \right)^{-1/2}")
-            st.info("Donde $x_i$ es la fracción molar y $K_i$ es la conductividad térmica del componente puro.")
-
-        # --- 2. MOTOR DE CÁLCULO (Usando los 4 modelos de puros previos) ---
-        # Definimos los datos de la mezcla según tu imagen (Fracciones molares)
+        # --- 1. CONFIGURACIÓN DE LA MEZCLA ---
         datos_mezcla = {
-            "Componente": ["Ácido oleico", "Ácido linoleico", "Ácido linolénico", "Ácido palmítico", "Ácido esteárico"],
+            "Componente": ["Ácido Oleico", "Ácido Linoleico", "Ácido Linolénico", "Ácido Palmítico", "Ácido Esteárico"],
             "xi": [0.1893, 0.5367, 0.0628, 0.1564, 0.0374]
         }
         df_mix_config = pd.DataFrame(datos_mezcla)
 
-        # Selección de modelo de puros para la mezcla
-        metodo_puros = st.selectbox(
-            "📌 Selecciona el método de puros para alimentar la mezcla:",
-            ["Perkins (Modelo 4)", "Di Nicola et al."]
+        metodo_puros_mix = st.selectbox(
+            "📌 Selecciona el modelo de componentes puros para el desglose de tabla:",
+            ["1. Latini et al.", "2. Sastri", "3. Di Nicola et al.", "4. Perkins"]
         )
 
-        # --- 3. CÁLCULO DE CONDUCTIVIDADES DE PUROS ---
-        ki_puros = []
-        
-        # Obtenemos los valores calculados previamente (debes asegurarte que las funciones existan)
-        for _, row in df_mix_config.iterrows():
-            # Buscamos los datos críticos del componente
-            info_c = df_comp_aceite[df_comp_aceite["Componente"] == row["Componente"]].iloc[0]
-            
-            if metodo_puros == "Perkins (Modelo 4)":
-                # Llamamos a tu función de Perkins (la que corregimos antes)
-                val, _, _, _, _ = metodo_perkins_liquidos(
-                    temp_k_aceite, info_c["T_c (K)"], info_c["rho_liq (kg/m3)"], 
-                    info_c["rho_c (kg/m3)"], row["Componente"]
-                )
-            else:
-                # Simulamos o llamamos a Di Nicola (según imagen e9e3b7)
-                # Aquí deberías tener tu función: metodo_dinicola(temp, Tr, delta_h, omega, M, constantes)
-                # Por ahora usamos un placeholder de ejemplo:
-                val = 0.145 
-            
-            ki_puros.append(val)
-
-        ki_puros = np.array(ki_puros)
-        xi = df_mix_config["xi"].values
-
-        # --- 4. APLICACIÓN DE REGLA DE VREDEVELD ---
-        # Formula: KM = ( sum( xi * Ki^-2 ) )^-0.5
-        suma_vredeveld = np.sum(xi * (ki_puros**(-2)))
-        km_final = suma_vredeveld**(-0.5)
-
-        # --- 5. RESULTADOS Y MÉTRICAS ---
-        st.write("---")
-        c1, c2 = st.columns(2)
-        c1.metric(f"λ Mezcla (Vredeveld)", f"{km_final:.5f} W/m·K")
-        
-        # Supongamos un valor experimental del aceite de soja (~0.160 según tablas comunes)
-        val_exp_mezcla = 0.162 # Ajustar según tu dato real
-        error_mix = abs((val_exp_mezcla - km_final)/val_exp_mezcla)*100
-        c2.metric("Error Relativo vs Exp.", f"{error_mix:.2f}%")
-
-        # --- 6. TABLAS Y GRÁFICA ---
-        col_t, col_g = st.columns([1, 1])
-
-        with col_t:
-            st.write("##### 📑 Aportes Individuales a la Mezcla")
-            df_res_mix = df_mix_config.copy()
-            df_res_mix["Ki Puro (W/m·K)"] = np.round(ki_puros, 5)
-            df_res_mix["Contribución (xi * Ki^-2)"] = np.round(xi * (ki_puros**(-2)), 4)
-            st.dataframe(df_res_mix, use_container_width=True)
-
-        with col_g:
-            st.write("##### 📊 Distribución de Componentes")
-            fig_pie, ax_pie = plt.subplots(figsize=(5, 5))
-            ax_pie.pie(xi, labels=df_res_mix["Componente"], autopct='%1.1f%%', 
-                       startangle=140, colors=["#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51"],
-                       wedgeprops={'edgecolor': 'white'})
-            st.pyplot(fig_pie)
-
-        # --- 7. GRÁFICA DE SENSIBILIDAD (λ Mezcla vs T) ---
-        st.write("---")
-        st.write("##### 📈 Sensibilidad Térmica del Aceite de Soja")
-        
-        temps_range = np.linspace(293.15, 373.15, 10) # 20°C a 100°C
-        y_km = []
-
-        for T in temps_range:
-            ki_T = []
+        # --- 2. CÁLCULO EN EL PUNTO ACTUAL ---
+        ki_puros_actual = []
+        try:
             for _, row in df_mix_config.iterrows():
                 info_c = df_comp_aceite[df_comp_aceite["Componente"] == row["Componente"]].iloc[0]
-                val_T, _, _, _, _ = metodo_perkins_liquidos(T, info_c["T_c (K)"], info_c["rho_liq (kg/m3)"], info_c["rho_c (kg/m3)"], row["Componente"])
-                ki_T.append(val_T)
+                val_ki = obtener_lambda_puro(metodo_puros_mix, info_c, temp_k_aceite)
+                ki_puros_actual.append(val_ki)
+
+            ki_puros_actual = np.array(ki_puros_actual)
+            xi = df_mix_config["xi"].values
+            km_punto_actual = (np.sum(xi * (ki_puros_actual**-2)))**-0.5
+
+            # --- 3. MÉTRICAS Y TABLAS ---
+            st.write("---")
+            m1, m2 = st.columns(2)
+            m1.metric(f"λ Mezcla (Vredeveld)", f"{km_punto_actual:.5f} W/m·K")
+
+            st.dataframe(df_mix_config.assign(**{"λi Puro": np.round(ki_puros_actual, 5)}), use_container_width=True)
+
+            # --- 4. GRÁFICA DE DISPERSIÓN DINÁMICA ---
+            st.write("---")
+            st.write(f"##### 📈 Evolución de Conductividad (Rango centrado en {temp_k_aceite}K)")
             
-            km_T = (np.sum(xi * (np.array(ki_T)**(-2))))**(-0.5)
-            y_km.append(km_T)
+            # CORRECCIÓN AQUÍ: Definir rango dinámico para que el punto siempre esté incluido
+            # Creamos un rango que vaya desde 273K hasta la temperatura actual + 50K
+            t_min_plot = 273.15
+            t_max_plot = max(450, temp_k_aceite + 50) 
+            rango_t = np.linspace(t_min_plot, t_max_plot, 20)
+            
+            fig_mix, ax_mix = plt.subplots(figsize=(10, 5))
+            modelos_grafica = ["1. Latini et al.", "2. Sastri", "3. Di Nicola et al.", "4. Perkins"]
+            etiquetas = ["M1: Latini", "M2: Sastri", "M3: Di Nicola", "M4: Perkins"]
+            colores = ["#f94144", "#f9c74f", "#43aa8b", "#577590"] # Colores similares a tu imagen
+            
+            for idx, mod in enumerate(modelos_grafica):
+                y_lambda_mix = []
+                for t_plot in rango_t:
+                    ki_list = [obtener_lambda_puro(mod, df_comp_aceite[df_comp_aceite["Componente"]==c].iloc[0], t_plot) 
+                               for c in df_mix_config["Componente"]]
+                    km_t = (np.sum(xi * (np.array(ki_list)**-2)))**-0.5
+                    y_lambda_mix.append(km_t)
+                
+                # Línea suavizada y puntos de dispersión
+                ax_mix.plot(rango_t, y_lambda_mix, label=etiquetas[idx], color=colores[idx], linewidth=2, alpha=0.8)
+                ax_mix.scatter(rango_t, y_lambda_mix, color=colores[idx], s=35, edgecolors='white', linewidth=0.5)
 
-        fig_sens, ax_sens = plt.subplots(figsize=(8, 3.5))
-        ax_sens.plot(temps_range, y_km, marker='o', color='#e63946', label="Mezcla (Vredeveld)")
-        ax_sens.set_xlabel("Temperatura (K)")
-        ax_sens.set_ylabel("λ Mezcla (W/m·K)")
-        ax_sens.grid(alpha=0.3)
-        ax_sens.legend()
-        st.pyplot(fig_sens)
+            # Resaltar el Punto Actual (Si es 500K, ahora aparecerá sobre las líneas)
+            ax_mix.scatter(temp_k_aceite, km_punto_actual, color='red', s=200, zorder=10, 
+                           label=f'Punto Actual ({temp_k_aceite}K)', edgecolors='black', linewidth=2)
+
+            # Estética de la gráfica (Grid y etiquetas)
+            ax_mix.set_xlabel("Temperatura (K)", fontweight='bold')
+            ax_mix.set_ylabel("Conductividad Térmica Mezcla (W/m·K)", fontweight='bold')
+            ax_mix.set_title("Comportamiento de la Mezcla (Vredeveld) vs Temperatura", fontsize=12, fontweight='bold')
+            ax_mix.grid(True, linestyle='--', alpha=0.4)
+            ax_mix.legend()
+            
+            st.pyplot(fig_mix)
+
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 
+    # =====================================================================
+    # PESTAÑA: REGLA DE MEZCLADO (SOLUCIÓN IDEAL)
+    # =====================================================================
+    with tab_solucion_ideal:
+        st.header("🧪 Regla de Mezclado: Modelo de Solución Ideal")
+        st.write("Este modelo estima la conductividad a partir de las contribuciones logarítmicas de los componentes puros.")
+
+        # --- 1. CONFIGURACIÓN DE LA MEZCLA ---
+        datos_mezcla = {
+            "Componente": ["Ácido Oleico", "Ácido Linoleico", "Ácido Linolénico", "Ácido Palmítico", "Ácido Esteárico"],
+            "xi": [0.1893, 0.5367, 0.0628, 0.1564, 0.0374]
+        }
+        df_mix_config = pd.DataFrame(datos_mezcla)
+
+        metodo_puros_mix = st.selectbox(
+            "📌 Selecciona el modelo de componentes puros (Solución Ideal):",
+            ["1. Latini et al.", "2. Sastri", "3. Di Nicola et al.", "4. Perkins"],
+            key="sb_ideal"
+        )
+
+        # --- 2. MOTOR DE CÁLCULO (PUNTO ACTUAL) ---
+        ki_puros_actual = []
+        try:
+            for _, row in df_mix_config.iterrows():
+                info_c = df_comp_aceite[df_comp_aceite["Componente"] == row["Componente"]].iloc[0]
+                val_ki = obtener_lambda_puro(metodo_puros_mix, info_c, temp_k_aceite)
+                ki_puros_actual.append(val_ki)
+
+            ki_puros_actual = np.array(ki_puros_actual)
+            xi = df_mix_config["xi"].values
+            
+            # FÓRMULA SOLUCIÓN IDEAL: Km = exp( sum( xi * ln(Ki) ) )
+            km_punto_actual = np.exp(np.sum(xi * np.log(ki_puros_actual)))
+
+            # --- 3. MÉTRICAS Y TABLAS ---
+            st.write("---")
+            m1, m2 = st.columns(2)
+            m1.metric(f"λ Mezcla (Ideal)", f"{km_punto_actual:.5f} W/m·K")
+            
+            val_exp_soja = 0.162 
+            err_mix = abs((val_exp_soja - km_punto_actual)/val_exp_soja)*100
+            m2.metric(f"Error vs Experimental ({temp_k_aceite}K)", f"{err_mix:.2f}%")
+
+            st.write("##### 📑 Desglose de Contribuciones Logarítmicas")
+            df_res = df_mix_config.copy()
+            df_res["λi Puro (W/m·K)"] = np.round(ki_puros_actual, 5)
+            df_res["ln(λi)"] = np.round(np.log(ki_puros_actual), 5)
+            df_res["xi * ln(λi)"] = xi * np.log(ki_puros_actual)
+            st.dataframe(df_res, use_container_width=True)
+
+            # --- 4. GRÁFICA DE DISPERSIÓN DINÁMICA ---
+            st.write("---")
+            st.write(f"##### 📈 Evolución de Conductividad - Modelo Ideal (Rango centrado en {temp_k_aceite}K)")
+            
+            t_min_plot = 273.15
+            t_max_plot = max(450, temp_k_aceite + 50) 
+            rango_t = np.linspace(t_min_plot, t_max_plot, 20)
+            
+            fig_mix, ax_mix = plt.subplots(figsize=(10, 5))
+            modelos_grafica = ["1. Latini et al.", "2. Sastri", "3. Di Nicola et al.", "4. Perkins"]
+            etiquetas = ["M1: Latini", "M2: Sastri", "M3: Di Nicola", "M4: Perkins"]
+            colores = ["#e63946", "#f4a261", "#2a9d8f", "#457b9d"]
+            
+            for idx, mod in enumerate(modelos_grafica):
+                y_lambda_mix = []
+                for t_plot in rango_t:
+                    ki_list = [obtener_lambda_puro(mod, df_comp_aceite[df_comp_aceite["Componente"]==c].iloc[0], t_plot) 
+                               for c in df_mix_config["Componente"]]
+                    # Aplicar fórmula Ideal en cada punto
+                    km_t = np.exp(np.sum(xi * np.log(np.array(ki_list))))
+                    y_lambda_mix.append(km_t)
+                
+                ax_mix.plot(rango_t, y_lambda_mix, label=etiquetas[idx], color=colores[idx], linewidth=2, alpha=0.8)
+                ax_mix.scatter(rango_t, y_lambda_mix, color=colores[idx], s=35, edgecolors='white')
+
+            # Resaltar Punto Actual
+            ax_mix.scatter(temp_k_aceite, km_punto_actual, color='red', s=200, zorder=10, 
+                           label=f'Punto Actual ({temp_k_aceite}K)', edgecolors='black', linewidth=2)
+
+            ax_mix.set_xlabel("Temperatura (K)", fontweight='bold')
+            ax_mix.set_ylabel("Conductividad Térmica Mezcla (W/m·K)", fontweight='bold')
+            ax_mix.set_title("Comportamiento de la Mezcla (Ideal) vs Temperatura", fontsize=12, fontweight='bold')
+            ax_mix.grid(True, linestyle='--', alpha=0.4)
+            ax_mix.legend()
+            
+            st.pyplot(fig_mix)
+
+        except Exception as e:
+            st.error(f"❌ Error en el cálculo: {e}")
+
+
+
+
+
+
+
+   
